@@ -1,55 +1,25 @@
 import axios from 'axios';
 
-const ensureAbsoluteUrl = (value) => {
-      if (!value) return value;
-
-      if (/^https?:\/\//i.test(value)) {
-            return value;
-      }
-
-      if (value.startsWith('//')) {
-            return `https:${value}`;
-      }
-
-      if (value.startsWith('/')) {
-            if (typeof window !== 'undefined') {
-                  return new URL(value, window.location.origin).toString();
-            }
-            return `http://localhost:5001${value}`;
-      }
-
-      return `https://${value}`;
-};
-
-const appendApiSegment = (urlString) => {
-      if (!urlString) return urlString;
-
-      try {
-            const url = new URL(urlString);
-            const sanitizedPath = url.pathname.replace(/\/$/, '');
-
-            if (!/\/api(\/|$)/i.test(sanitizedPath)) {
-                  url.pathname = `${sanitizedPath}/api`;
-            } else {
-                  url.pathname = sanitizedPath;
-            }
-
-            return url.toString().replace(/\/$/, '');
-      } catch {
-            return urlString;
-      }
-};
-
 const resolveBaseURL = () => {
       const raw = import.meta.env.VITE_API_BASE_URL?.trim();
 
       if (raw) {
-            const absolute = ensureAbsoluteUrl(raw);
-            if (!absolute) {
-                  return undefined;
+            try {
+                  const normalized = raw.replace(/\s+/g, '');
+                  const hasProtocol = /^https?:\/\//i.test(normalized) || normalized.startsWith('//');
+                  const url = hasProtocol
+                        ? new URL(normalized)
+                        : new URL(normalized, 'https://');
+
+                  if (url.pathname === '/' || url.pathname === '') {
+                        url.pathname = '/api';
+                  }
+
+                  return url.toString().replace(/\/$/, '');
+            } catch {
+                  // Fallback to localhost if the provided value cannot be parsed
+                  return 'http://localhost:5001/api';
             }
-            const withProtocol = absolute;
-            return appendApiSegment(withProtocol);
       }
 
       if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {

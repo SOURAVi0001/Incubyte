@@ -69,17 +69,25 @@ const seedData = async () => {
     console.log('Sweets seeded successfully!');
 
     // Check if admin exists, if not create one
-    const adminExists = await User.findOne({ email: 'admin@example.com' });
-    if (!adminExists) {
+    const adminEmail = 'admin@example.com';
+    const adminPassword = 'password123';
+
+    const adminUser = await User.findOne({ email: adminEmail });
+
+    if (adminUser) {
+      adminUser.username = 'admin';
+      adminUser.role = 'admin';
+      adminUser.password = adminPassword;
+      await adminUser.save();
+      console.log('Admin user refreshed: admin@example.com / password123');
+    } else {
       await User.create({
         username: 'admin',
-        email: 'admin@example.com',
-        password: 'password123',
+        email: adminEmail,
+        password: adminPassword,
         role: 'admin'
       });
       console.log('Admin user created: admin@example.com / password123');
-    } else {
-      console.log('Admin user already exists.');
     }
 
     process.exit();

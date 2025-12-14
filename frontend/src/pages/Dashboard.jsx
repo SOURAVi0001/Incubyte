@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 
+const initialFormState = {
+      name: '',
+      price: '',
+      description: '',
+      quantity: '',
+      category: '',
+      imageFile: null
+};
+
 const Dashboard = () => {
       const { user } = useAuth();
       const [sweets, setSweets] = useState([]);
@@ -10,24 +19,33 @@ const Dashboard = () => {
       const [error, setError] = useState(null);
       const [showModal, setShowModal] = useState(false);
       const [editingSweet, setEditingSweet] = useState(null);
-      const [formData, setFormData] = useState({
-            name: '',
-            price: '',
-            description: '',
-            imageUrl: '',
-            quantity: ''
-      });
+      const [formData, setFormData] = useState({ ...initialFormState });
+      const [imagePreview, setImagePreview] = useState('');
+
+      const getFriendlyMessage = (err, fallback = 'Something went wrong. Please try again.') => {
+            const status = err?.response?.status;
+            if (status === 400) {
+                  return 'Invalid request. Please review your input and try again.';
+            }
+            return fallback;
+      };
 
       useEffect(() => {
             fetchSweets();
       }, []);
+
+      useEffect(() => () => {
+            if (imagePreview && imagePreview.startsWith('blob:')) {
+                  URL.revokeObjectURL(imagePreview);
+            }
+      }, [imagePreview]);
 
       const fetchSweets = async () => {
             try {
                   const { data } = await api.get('/sweets');
                   setSweets(data);
             } catch (err) {
-                  setError('Failed to fetch sweets');
+                  setError('Something went wrong while loading sweets. Please try again later.');
             } finally {
                   setLoading(false);
             }
@@ -36,9 +54,9 @@ const Dashboard = () => {
       const handlePurchase = async (id) => {
             try {
                   const { data } = await api.post(`/sweets/${id}/purchase`);
-                  setSweets(sweets.map((sweet) => (sweet._id === id ? data : sweet)));
+                  setSweets((prev) => prev.map((sweet) => (sweet._id === id ? data : sweet)));
             } catch (err) {
-                  alert(err.response?.data?.message || 'Purchase failed');
+                  alert(getFriendlyMessage(err));
             }
       };
 
@@ -46,9 +64,9 @@ const Dashboard = () => {
             if (!window.confirm('Are you sure you want to remove this delight?')) return;
             try {
                   await api.delete(`/sweets/${id}`);
-                  setSweets(sweets.filter(s => s._id !== id));
+                  setSweets((prev) => prev.filter((s) => s._id !== id));
             } catch (err) {
-                  alert(err.response?.data?.message || 'Delete failed');
+                  alert(getFriendlyMessage(err));
             }
       };
 
@@ -56,44 +74,93 @@ const Dashboard = () => {
             setEditingSweet(sweet);
             setFormData({
                   name: sweet.name,
-                  price: sweet.price,
+                  price: sweet.price?.toString() ?? '',
                   description: sweet.description,
-                  imageUrl: sweet.imageUrl,
-                  quantity: sweet.quantity
+                  quantity: sweet.quantity?.toString() ?? '',
+                  category: sweet.category || '',
+                  imageFile: null
             });
+            setImagePreview(sweet.imageUrl || '');
             setShowModal(true);
       };
 
       const openAddModal = () => {
             setEditingSweet(null);
-            setFormData({
-                  name: '',
-                  price: '',
-                  description: '',
-                  imageUrl: '',
-                  quantity: ''
-            });
+            setFormData({ ...initialFormState });
+            setImagePreview('');
             setShowModal(true);
       };
 
       const handleFormChange = (e) => {
             const { name, value } = e.target;
-            setFormData({ ...formData, [name]: value });
+            setFormData((prev) => ({ ...prev, [name]: value }));
+      };
+
+      const handleFileChange = (e) => {
+            const file = e.target.files && e.target.files[0];
+            setFormData((prev) => ({ ...prev, imageFile: file || null }));
+
+            if (file) {
+                  setImagePreview(URL.createObjectURL(file));
+            } else {
+                  setImagePreview(editingSweet?.imageUrl || '');
+            }
+      };
+
+      const closeModal = () => {
+            setShowModal(false);
+            setEditingSweet(null);
+            setFormData({ ...initialFormState });
+            setImagePreview((prev) => {
+                  if (prev && prev.startsWith('blob:')) {
+                        URL.revokeObjectURL(prev);
+                  }
+                  return '';
+            });
       };
 
       const handleSubmit = async (e) => {
             e.preventDefault();
+
+            if (!formData.name.trim() || !formData.price || !formData.description.trim()) {
+                  alert('Please complete all required fields.');
+                  return;
+            }
+
+            if (!editingSweet && !formData.imageFile) {
+                  alert('Please upload an image for this sweet.');
+                  return;
+            }
+
             try {
-                  if (editingSweet) {
-                        const { data } = await api.put(`/sweets/${editingSweet._id}`, formData);
-                        setSweets(sweets.map(s => s._id === editingSweet._id ? data : s));
-                  } else {
-                        const { data } = await api.post('/sweets', formData);
-                        setSweets([...sweets, data]);
+                  const payload = new FormData();
+                  payload.append('name', formData.name.trim());
+                  payload.append('price', formData.price);
+                  payload.append('description', formData.description.trim());
+
+                  if (formData.quantity !== '') {
+                        payload.append('quantity', formData.quantity);
                   }
-                  setShowModal(false);
+
+                  if (formData.category.trim()) {
+                        payload.append('category', formData.category.trim());
+                  }
+
+                  if (formData.imageFile) {
+                        payload.append('image', formData.imageFile);
+                  }
+
+                  if (editingSweet) {
+                        const { data } = await api.put(`/sweets/${editingSweet._id}`, payload);
+                        setSweets((prev) => prev.map((s) => (s._id === editingSweet._id ? data : s)));
+                  } else {
+                        const { data } = await api.post('/sweets', payload);
+                        setSweets((prev) => [...prev, data]);
+                  }
+
+                  closeModal();
             } catch (err) {
-                  alert(err.response?.data?.message || 'Operation failed');
+                  alert(getFriendlyMessage(err));
             }
       };
 
@@ -151,7 +218,7 @@ const Dashboard = () => {
                                                 <span className="text-lg font-extrabold text-brand-600">${Number(sweet.price).toFixed(2)}</span>
                                           </div>
                                           <p className="text-gray-600 text-sm mb-4 line-clamp-2 leading-relaxed h-10">{sweet.description}</p>
-                                          
+
                                           <div className="flex items-center justify-between text-xs font-semibold text-gray-500 mb-6">
                                                 <span className={sweet.quantity < 5 && sweet.quantity > 0 ? 'text-orange-500' : ''}>
                                                       {sweet.quantity > 0 ? `${sweet.quantity} left in jar` : 'Empty jar'}
@@ -206,11 +273,11 @@ const Dashboard = () => {
                                           <div className="grid grid-cols-2 gap-4">
                                                 <div>
                                                       <label className="block text-sm font-bold text-gray-700 mb-1 ml-1">Price</label>
-                                                      <input type="number" name="price" value={formData.price} onChange={handleFormChange} step="0.01" className="w-full p-3 bg-brand-50 border-none rounded-xl focus:ring-2 focus:ring-brand-400 transition-all" required />
+                                                      <input type="number" name="price" value={formData.price} onChange={handleFormChange} step="0.01" min="0" className="w-full p-3 bg-brand-50 border-none rounded-xl focus:ring-2 focus:ring-brand-400 transition-all" required />
                                                 </div>
                                                 <div>
                                                       <label className="block text-sm font-bold text-gray-700 mb-1 ml-1">Quantity</label>
-                                                      <input type="number" name="quantity" value={formData.quantity} onChange={handleFormChange} className="w-full p-3 bg-brand-50 border-none rounded-xl focus:ring-2 focus:ring-brand-400 transition-all" required />
+                                                      <input type="number" name="quantity" value={formData.quantity} onChange={handleFormChange} min="0" className="w-full p-3 bg-brand-50 border-none rounded-xl focus:ring-2 focus:ring-brand-400 transition-all" required />
                                                 </div>
                                           </div>
                                           <div>
@@ -218,11 +285,31 @@ const Dashboard = () => {
                                                 <textarea name="description" value={formData.description} onChange={handleFormChange} className="w-full p-3 bg-brand-50 border-none rounded-xl focus:ring-2 focus:ring-brand-400 transition-all" rows="3" required></textarea>
                                           </div>
                                           <div>
-                                                <label className="block text-sm font-bold text-gray-700 mb-1 ml-1">Image URL</label>
-                                                <input type="text" name="imageUrl" value={formData.imageUrl} onChange={handleFormChange} className="w-full p-3 bg-brand-50 border-none rounded-xl focus:ring-2 focus:ring-brand-400 transition-all" required />
+                                                <label className="block text-sm font-bold text-gray-700 mb-1 ml-1">Category (optional)</label>
+                                                <input type="text" name="category" value={formData.category} onChange={handleFormChange} className="w-full p-3 bg-brand-50 border-none rounded-xl focus:ring-2 focus:ring-brand-400 transition-all" placeholder="e.g., Cupcake" />
+                                          </div>
+                                          <div>
+                                                <label className="block text-sm font-bold text-gray-700 mb-1 ml-1">Image</label>
+                                                <input
+                                                      type="file"
+                                                      accept="image/*"
+                                                      name="image"
+                                                      onChange={handleFileChange}
+                                                      className="w-full p-3 bg-brand-50 border-none rounded-xl focus:ring-2 focus:ring-brand-400 transition-all"
+                                                />
+                                                {imagePreview && (
+                                                      <img
+                                                            src={imagePreview}
+                                                            alt="Sweet preview"
+                                                            className="mt-3 w-full h-40 object-cover rounded-xl border border-brand-100"
+                                                      />
+                                                )}
+                                                {editingSweet && !formData.imageFile && (
+                                                      <p className="text-xs text-gray-500 mt-2 ml-1">Current image will be kept unless you upload a new one.</p>
+                                                )}
                                           </div>
                                           <div className="flex gap-3 pt-4">
-                                                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-colors">Cancel</button>
+                                                <button type="button" onClick={closeModal} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-colors">Cancel</button>
                                                 <button type="submit" className="flex-1 py-3 bg-brand-600 text-white rounded-xl font-bold hover:bg-brand-700 shadow-lg transition-all">{editingSweet ? 'Save Changes' : 'Create'}</button>
                                           </div>
                                     </form>

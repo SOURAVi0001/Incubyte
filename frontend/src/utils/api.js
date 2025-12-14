@@ -30,10 +30,7 @@ const resolveBaseURL = () => {
 };
 
 const api = axios.create({
-      baseURL: resolveBaseURL(),
-      headers: {
-            'Content-Type': 'application/json',
-      },
+      baseURL: resolveBaseURL()
 });
 
 api.interceptors.request.use(

@@ -10,11 +10,12 @@ const {
       searchSweets
 } = require('../controllers/sweetsController');
 const { protect, admin } = require('../middleware/authMiddleware');
+const upload = require('../middleware/uploadMiddleware');
 
 router.get('/', getSweets);
 router.get('/search', searchSweets);
-router.post('/', protect, admin, createSweet);
-router.put('/:id', protect, admin, updateSweet);
+router.post('/', protect, admin, upload.single('image'), createSweet);
+router.put('/:id', protect, admin, upload.single('image'), updateSweet);
 router.delete('/:id', protect, admin, deleteSweet);
 router.post('/:id/purchase', protect, purchaseSweet);
 router.post('/:id/restock', protect, admin, restockSweet);

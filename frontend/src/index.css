@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  background-color: #fff1f2; /* Rose 50 */
+  color: #831843; /* Pink 900 */
+}
+
+/* Smooth scrolling behavior */
+html {
+  scroll-behavior: smooth;
+}
